@@ -10,6 +10,8 @@ export default [
 
 	layout("./routes/Auth/auth-layout.tsx", [
 		route("d", "routes/Dashboard/dashboard.tsx", [
+			index("./routes/Dashboard/index.tsx"),
+
 			route("opportunities", "routes/Opportunities/opportunities.tsx"),
 
 			route("contacts", "./routes/Contacts/contacts.tsx"),
