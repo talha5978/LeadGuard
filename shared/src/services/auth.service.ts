@@ -1,380 +1,145 @@
-import type {
-	GetCurrentUser,
-	GetFullCurrentUser,
-	GetSession,
-	Login,
-	Logout,
-	VerifyOtp,
-} from "@workspace/shared/types/auth.d";
-import type { AdminUser, FullCurrentUser } from "@workspace/shared/types/user.d";
-import { loggerMiddleware } from "@workspace/shared/middlewares/logger.middleware";
-import { UseClassMiddleware } from "@workspace/shared/decorators/useClassMiddleware";
 import { Service } from "@workspace/shared/services/service.base";
-import { GenerateLinkParams, type Session, type User, type UserResponse } from "@supabase/auth-js";
 import { ApiError } from "@workspace/shared/utils/ApiError";
-import { SignupFormData } from "@workspace/shared/schemas/signup.schema";
-import { ProfileUpdateForm } from "@workspace/shared/schemas/profile-update.schema";
+import type { SignupFormData } from "@workspace/shared/schemas/signup.schema";
+import type {
+	AppUser,
+	GetCurrentUser,
+	GetSession,
+	LoginResult,
+	LogoutResult,
+	UserRole,
+} from "@workspace/shared/types/auth.d";
+import bcrypt from "bcryptjs";
+import {
+	createSessionCookie,
+	destroySessionCookie,
+	getUserIdFromRequest,
+} from "@workspace/shared/utils/session-cookie";
 
-@UseClassMiddleware(loggerMiddleware)
 export class AuthService extends Service {
-	async getCurrentUser(isAdmin = true): Promise<GetCurrentUser> {
-		console.log("🌸 Running the GET current user service");
-		try {
-			const {
-				data: { user: authUser },
-				error: authUserErr,
-			} = await this.supabase.auth.getUser();
-			// console.log("Auth user: ", authUser);
+	private async hashPassword(password: string) {
+		return bcrypt.hash(password, 12);
+	}
 
-			let error: null | ApiError = null;
-			if (authUserErr || authUser == null) {
-				error = new ApiError(authUserErr?.message || "User not found", 401, []);
-				return { user: null, error };
+	private async verifyPassword(password: string, hash: string) {
+		return bcrypt.compare(password, hash);
+	}
+
+	/**
+	 * Get current user from session cookie
+	 */
+	async getCurrentUser(): Promise<GetCurrentUser> {
+		try {
+			const userId = getUserIdFromRequest(this.request);
+
+			if (!userId) {
+				return {
+					user: null,
+					error: new ApiError("Not authenticated", 401),
+				};
 			}
 
-			// console.log("Reached here 😀😀😀", authUser.id);
-
-			let query = this.supabase
-				.from(this.USERS_TABLE)
+			const { data: profile, error } = await this.supabase
+				.from(this.PROFILES_TABLE)
 				.select(
 					`
-					user_id,
-					first_name,
-					last_name,
-					phone_number,
+					id,
+					workspace_id,
+					full_name,
+					email,
 					role,
-					${this.USER_ROLES_TABLE}(id, role_name)
+					status,
+					avatar_url,
+					created_at
 				`,
 				)
-				.eq("user_id", authUser.id)
-				.eq("status", true);
-			// .single();
+				.eq("id", userId)
+				.single();
 
-			if (isAdmin) {
-				const { data: adminRoleId, error: adminRoleIdError } = await this.supabase
-					.from(this.USER_ROLES_TABLE)
-					.select("id")
-					.eq("role_name", "admin")
-					.limit(1)
-					.single();
-
-				if (adminRoleIdError || adminRoleId == null) {
-					error = new ApiError(adminRoleIdError?.message || "Admin role not found", 401, []);
-					return { user: null, error };
-				}
-
-				query = query.eq("role", adminRoleId.id);
+			if (error || !profile) {
+				return {
+					user: null,
+					error: new ApiError(error?.message || "Profile not found", 401),
+				};
 			}
 
-			const { data, error: userDetailsErr } = await query;
-			// console.log("Reached at next level 😀😀😀", userDetails ?? "NOT FOUND 🌋");
-			const userDetails = data != null ? data[0] : null;
-
-			if (userDetailsErr || userDetails == null) {
-				error = new ApiError(userDetailsErr?.message || "User not found", 401, []);
-				return { user: null, error };
-			}
-
-			const appUser: AdminUser = {
-				id: authUser.id ?? userDetails.user_id,
-				email: authUser.email ?? "",
-				is_email_verified: authUser.user_metadata.email_verified ?? true,
-				created_at: authUser.created_at,
-				first_name: userDetails.first_name ?? null,
-				last_name: userDetails.last_name ?? null,
-				phone_number: userDetails.phone_number ?? null,
-				role: {
-					role_id: userDetails.user_roles.id,
-					role_name: userDetails.user_roles.role_name,
-				},
+			const appUser: AppUser = {
+				id: profile.id,
+				email: profile.email as string,
+				full_name: profile.full_name,
+				role: profile.role as UserRole,
+				status: profile.status as any,
+				workspace_id: profile.workspace_id,
+				avatar_url: profile.avatar_url,
+				created_at: profile.created_at,
 			};
 
-			return { user: appUser, error };
+			this.currentUser = {
+				id: appUser.id,
+				email: appUser.email,
+				role: appUser.role,
+			};
+
+			return { user: appUser, error: null };
 		} catch (err: any) {
-			if (err instanceof ApiError) {
-				return { user: null, error: err };
-			}
 			return {
 				user: null,
-				error: new ApiError("Unknown error", 500, [err]),
+				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
 			};
 		}
 	}
 
 	async getSession(): Promise<GetSession> {
-		try {
-			const {
-				data: { session },
-				error: sessionErr,
-			} = await this.supabase.auth.getSession();
-			// console.log("Auth user: ", authUser);
+		const userId = getUserIdFromRequest(this.request);
 
-			let error: null | ApiError = null;
-			if (sessionErr || session == null) {
-				error = new ApiError(sessionErr?.message || "Session not found", 401, []);
-				return { session: null, error };
-			}
-
-			return { session, error };
-		} catch (err: any) {
+		if (!userId) {
 			return {
 				session: null,
-				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
+				error: new ApiError("Session not found", 401),
 			};
 		}
+
+		return {
+			session: { user: { id: userId } } as any,
+			error: null,
+		};
 	}
 
-	async getCode({ email }: { email: string }): Promise<Login> {
+	/**
+	 * Login
+	 */
+	async loginWithPassword({ email, password }: { email: string; password: string }): Promise<LoginResult> {
 		try {
-			const { error: fetchError } = await this.supabase.auth.signInWithOtp({
-				email,
-				options: { shouldCreateUser: false },
-			});
-
-			// data and session if destructrud from here will be null because it is OTP login
-
-			let error: null | ApiError = null;
-			if (fetchError) {
-				error = new ApiError(fetchError.message, 500, []);
-			}
-
-			return { error, headers: this.headers };
-		} catch (err: any) {
-			return {
-				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
-				headers: this.headers,
-			};
-		}
-	}
-
-	async verifyOtp({ email, token }: { email: string; token: string }): Promise<VerifyOtp> {
-		try {
-			const {
-				error: fetchError,
-				data: { user, session },
-			} = await this.supabase.auth.verifyOtp({
-				email,
-				token,
-				type: "email",
-			});
-
-			// console.log(user, session, fetchError);
-
-			// If successful, the user is now logged in, and you receive a valid session that looks like
-
-			let error: null | ApiError = null;
-			if (fetchError) {
-				error = new ApiError(fetchError.message, Number(fetchError.code) || 500, []);
-			}
-			// console.log(this.headers);
-
-			return { error, user, session, headers: this.headers };
-		} catch (err: any) {
-			return {
-				user: null,
-				session: null,
-				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
-				headers: this.headers,
-			};
-		}
-	}
-
-	async logout(): Promise<Logout> {
-		try {
-			// Signout the user for this session only
-			const { error: logoutErrr } = await this.supabase.auth.signOut({ scope: "local" });
-
-			let error: null | ApiError = null;
-			if (logoutErrr) {
-				error = new ApiError(logoutErrr.message, 500, []);
-			}
-
-			return { error, headers: this.headers };
-		} catch (err: any) {
-			return {
-				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
-				headers: this.headers,
-			};
-		}
-	}
-
-	async exchangeCodeForSession({ code }: { code: string }): Promise<
-		Login & {
-			data: {
-				user: User | null;
-				session: Session | null;
-			} | null;
-		}
-	> {
-		try {
-			const { error: fetchError, data } = await this.supabase.auth.exchangeCodeForSession(code);
-
-			let error: null | ApiError = null;
-			if (fetchError) {
-				error = new ApiError(fetchError.message, 500, []);
-			}
-
-			return { error, headers: this.headers, data };
-		} catch (err: any) {
-			return {
-				error: err instanceof ApiError ? err : new ApiError("Unknown error", 500, [err]),
-				headers: this.headers,
-				data: null,
-			};
-		}
-	}
-
-	async getFullCurrentUser(): Promise<GetFullCurrentUser> {
-		console.log("FETCHING CURRENT USER -------->");
-		try {
-			const {
-				data: { user: authUser },
-				error: authUserErr,
-			} = await this.supabase.auth.getUser();
-			// console.log("Auth user: ", authUser);
-
-			let error: null | ApiError = null;
-			if (authUserErr || authUser == null) {
-				error = new ApiError(authUserErr?.message || "User not found", 401, []);
-				return { user: null, error };
-			}
-
-			const { data: userDetails, error: userDetailsErr } = await this.supabase
-				.from(this.USERS_TABLE)
-				.select(
-					`
-					user_id,
-					first_name,
-					last_name,
-					phone_number,
-					role,
-					created_at,
-					${this.USER_ROLES_TABLE}(id, role_name)
-				`,
-				)
-				.eq("user_id", authUser.id)
-				.eq("status", true)
+			const { data: profile, error } = await this.supabase
+				.from(this.PROFILES_TABLE)
+				.select("id, email, password")
+				.eq("email", email.toLowerCase().trim())
 				.single();
 
-			if (userDetailsErr || userDetails == null) {
-				error = new ApiError(userDetailsErr?.message || "User not found", 401, []);
-				return { user: null, error };
-			}
-
-			let frontPanelUser: FullCurrentUser = {
-				id: authUser.id ?? userDetails.user_id,
-				email: authUser.email ?? "",
-				is_email_verified: authUser.user_metadata.email_verified ?? true,
-				first_name: userDetails.first_name ?? null,
-				last_name: userDetails.last_name ?? null,
-				phone_number: userDetails.phone_number ?? null,
-				avatar_url: null,
-				role: {
-					role_id: userDetails.user_roles.id,
-					role_name: userDetails.user_roles.role_name,
-				},
-				created_at: userDetails.created_at ?? "N/A",
-				country: null,
-			};
-
-			if (userDetails != null) {
-				const { data: authUserResp } = await this.getAuthSchemaUser(frontPanelUser.id);
-				frontPanelUser.avatar_url = authUserResp.user?.user_metadata?.avatar_url ?? null;
-			}
-
-			return { user: frontPanelUser, error };
-		} catch (err: any) {
-			if (err instanceof ApiError) {
-				return { user: null, error: err };
-			}
-			return {
-				user: null,
-				error: new ApiError("Unknown error", 500, [err]),
-			};
-		}
-	}
-
-	async getUserById(user_id: string): Promise<{
-		error: ApiError | null;
-		user: {
-			user_id: string;
-			role: number;
-			created_at: string | null;
-		} | null;
-	}> {
-		try {
-			let error: null | ApiError = null;
-
-			const { data: userDetails, error: userDetailsErr } = await this.supabase
-				.from(this.USERS_TABLE)
-				.select(
-					`
-					user_id,
-					role,
-					created_at
-				`,
-				)
-				.eq("user_id", user_id)
-				.eq("status", true)
-				.limit(1)
-				.maybeSingle();
-
-			if (userDetailsErr || userDetails == null) {
-				error = new ApiError(userDetailsErr?.message || "User not found", 401, []);
-				return { user: null, error };
-			}
-
-			return {
-				user: userDetails
-					? {
-							user_id: userDetails.user_id,
-							role: userDetails.role,
-							created_at: userDetails.created_at,
-						}
-					: null,
-				error,
-			};
-		} catch (err: any) {
-			if (err instanceof ApiError) {
-				return { user: null, error: err };
-			}
-			return {
-				user: null,
-				error: new ApiError("Unknown error", 500, [err]),
-			};
-		}
-	}
-
-	async loginWithPassword({ email, password }: { email: string; password: string }): Promise<{
-		error: ApiError | null;
-		session: Session | null;
-		headers: Headers;
-	}> {
-		try {
-			const { data, error: fetchError } = await this.supabase.auth.signInWithPassword({
-				email,
-				password,
-			});
-
-			if (fetchError) {
+			if (error || !profile || !profile.password) {
 				return {
-					error: new ApiError(fetchError.message, 401, []),
+					error: new ApiError("Invalid email or password", 401),
 					session: null,
 					headers: this.headers,
 				};
 			}
 
-			if (!data.session) {
+			const isValid = await this.verifyPassword(password, profile.password);
+
+			if (!isValid) {
 				return {
-					error: new ApiError("No session returned after login", 500, []),
+					error: new ApiError("Invalid email or password", 401),
 					session: null,
 					headers: this.headers,
 				};
 			}
+
+			const cookie = createSessionCookie(profile.id);
+			this.headers.append("Set-Cookie", cookie);
 
 			return {
 				error: null,
-				session: data.session,
+				session: { user: { id: profile.id } } as any,
 				headers: this.headers,
 			};
 		} catch (err: any) {
@@ -386,134 +151,99 @@ export class AuthService extends Service {
 		}
 	}
 
-	async getAuthSchemaUser(id: string): Promise<UserResponse> {
-		try {
-			const resp = await this.supabase.auth.admin.getUserById(String(id)).then((res) => {
-				return res;
-			});
+	/**
+	 * Logout
+	 */
+	async logout(): Promise<LogoutResult> {
+		const cookie = destroySessionCookie();
+		this.headers.append("Set-Cookie", cookie);
 
-			return resp;
-		} catch (error) {
-			throw error;
-		}
+		return {
+			error: null,
+			headers: this.headers,
+		};
 	}
 
-	async insertConsumerUser(data: {
-		user_id: string;
-		firstName: string;
-		lastName: string;
-		phone: string | null;
-	}): Promise<
-		| {
-				success: boolean;
-				error: string | null;
-		  }
-		| undefined
-	> {
-		const { data: roleData, error: roleError } = await this.supabase
-			.from(this.USER_ROLES_TABLE)
-			.select("id")
-			.eq("role_name", "consumer")
-			.limit(1)
-			.maybeSingle();
-
-		if (!roleData || roleError) {
-			console.error("Role fetch failed:", roleError);
-			return {
-				success: false,
-				error: "Failed to create account. Please contact support.",
-			};
-		}
-
-		const {
-			error: profileError,
-			count,
-			data: insertedCustomer,
-			status,
-			statusText,
-		} = await this.supabase.from(this.USERS_TABLE).insert({
-			user_id: data.user_id,
-			first_name: data.firstName,
-			last_name: data.lastName,
-			phone_number: data.phone || null,
-			role: roleData.id,
-			status: true,
-		});
-
-		console.log("[PROD PROFILE DEBUG] Insert raw response:", {
-			insertedData: insertedCustomer,
-			profileError: profileError
-				? {
-						code: profileError.code,
-						message: profileError.message,
-						details: profileError.details,
-						hint: profileError.hint,
-					}
-				: null,
-			status,
-			statusText,
-			count,
-		});
-
-		if (profileError) {
-			console.error("Profile insert failed:", profileError);
-			this.deleteAuthUser(data.user_id);
-			return {
-				success: false,
-				error: "Account creation failed.",
-			};
-		}
-	}
-
-	async deleteAuthUser(user_id: string) {
-		await this.supabase.auth.admin.deleteUser(user_id);
-	}
-
+	/**
+	 * Signup
+	 */
 	async signUpWithPasswordAndProfile(data: Omit<SignupFormData, "confirmPassword">): Promise<{
 		success: boolean;
 		user?: any;
 		session?: any;
 		error?: string;
+		headers?: Headers;
 	}> {
 		try {
-			const { data: authData, error: authError } = await this.supabase.auth.signUp({
-				email: data.email,
-				password: data.password,
-				options: {
-					data: {
-						first_name: data.firstName,
-						last_name: data.lastName,
-						...(data.phone ? { phone_number: data.phone } : {}),
-					},
-				},
-			});
+			const email = data.email.toLowerCase().trim();
+			const fullName = `${data.firstName} ${data.lastName}`.trim();
 
-			if (authError) {
+			// Check existing email
+			const { data: existing } = await this.supabase
+				.from(this.PROFILES_TABLE)
+				.select("id")
+				.eq("email", email)
+				.maybeSingle();
+
+			if (existing) {
+				return { success: false, error: "Email is already registered" };
+			}
+
+			const hashedPassword = await this.hashPassword(data.password);
+
+			// Create workspace
+			const workspaceSlug = `${data.firstName.toLowerCase()}-${Date.now().toString().slice(-6)}`;
+
+			const { data: workspace, error: workspaceError } = await this.supabase
+				.from(this.WORKSPACES_TABLE)
+				.insert({
+					name: `${data.firstName}'s Workspace`,
+					slug: workspaceSlug,
+					max_open_leads_per_employee: 5,
+					acknowledgement_window_seconds: 60,
+					escalation_levels: 2,
+				})
+				.select("id")
+				.single();
+
+			if (workspaceError || !workspace) {
 				return {
 					success: false,
-					error: authError.message || "Failed to create account",
+					error: workspaceError?.message || "Failed to create workspace",
 				};
 			}
 
-			if (!authData.user) {
+			// Create profile
+			const { data: profile, error: profileError } = await this.supabase
+				.from(this.PROFILES_TABLE)
+				.insert({
+					workspace_id: workspace.id,
+					full_name: fullName,
+					email,
+					password: hashedPassword,
+					role: "owner",
+					status: "available",
+				} as any)
+				.select("id, email, full_name, role, workspace_id")
+				.single();
+
+			if (profileError || !profile) {
+				await this.supabase.from(this.WORKSPACES_TABLE).delete().eq("id", workspace.id);
 				return {
 					success: false,
-					error: "No user returned after signup",
+					error: profileError?.message || "Failed to create profile",
 				};
 			}
 
-			await this.insertConsumerUser({
-				user_id: authData.user.id,
-				firstName: data.firstName,
-				lastName: data.lastName,
-				phone: data.phone ?? null,
-			});
+			// Set session cookie
+			const cookie = createSessionCookie(profile.id);
+			this.headers.append("Set-Cookie", cookie);
 
-			// Success
 			return {
 				success: true,
-				user: authData.user,
-				session: authData.session,
+				user: profile,
+				session: { user: { id: profile.id } },
+				headers: this.headers,
 			};
 		} catch (err: any) {
 			console.error("Signup error:", err);
@@ -524,22 +254,39 @@ export class AuthService extends Service {
 		}
 	}
 
-	async updateUserProfile(data: ProfileUpdateForm & { user_id: string }) {
-		const { data: profileData, error: profileError } = await this.supabase
-			.from(this.USERS_TABLE)
+	async updateProfile(data: {
+		full_name?: string;
+		status?: "available" | "busy" | "on_leave" | "offline";
+		avatar_url?: string | null;
+	}) {
+		const { user, error: userError } = await this.getCurrentUser();
+
+		if (userError || !user) {
+			return {
+				data: null,
+				error: userError || new ApiError("Not authenticated", 401),
+			};
+		}
+
+		const { data: updated, error } = await this.supabase
+			.from(this.PROFILES_TABLE)
 			.update({
-				first_name: data.first_name,
-				last_name: data.last_name,
-				phone_number: data.phone_number,
-				country: data.country,
+				...(data.full_name !== undefined && { full_name: data.full_name }),
+				...(data.status !== undefined && { status: data.status }),
+				...(data.avatar_url !== undefined && { avatar_url: data.avatar_url }),
 			})
-			.eq("user_id", data.user_id);
+			.eq("id", user.id)
+			.select()
+			.single();
 
 		return {
-			data: profileData,
-			error: profileError
-				? new ApiError(profileError.message, Number(profileError.code ?? 500), [profileError.stack])
-				: null,
+			data: updated,
+			error: error ? new ApiError(error.message, 500) : null,
 		};
+	}
+
+	async isOwnerOrAdmin(): Promise<boolean> {
+		const { user } = await this.getCurrentUser();
+		return user?.role === "owner" || user?.role === "admin";
 	}
 }

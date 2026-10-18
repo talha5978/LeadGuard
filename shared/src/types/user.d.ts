@@ -1,8 +1,3 @@
-export enum UserRole {
-	ADMIN = "admin",
-	CONSUMER = "consumer",
-}
-
 export type AdminUser = {
 	id: string;
 	email: string;

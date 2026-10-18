@@ -252,6 +252,7 @@ export type Database = {
 					email: string | null;
 					full_name: string | null;
 					id: string;
+					password: string | null;
 					role: string;
 					status: string;
 					updated_at: string;
@@ -263,6 +264,7 @@ export type Database = {
 					email?: string | null;
 					full_name?: string | null;
 					id: string;
+					password?: string | null;
 					role?: string;
 					status?: string;
 					updated_at?: string;
@@ -274,6 +276,7 @@ export type Database = {
 					email?: string | null;
 					full_name?: string | null;
 					id?: string;
+					password?: string | null;
 					role?: string;
 					status?: string;
 					updated_at?: string;

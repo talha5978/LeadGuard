@@ -15,7 +15,7 @@
 		"dev:front": "npm run dev -w web",
 		"build:shared": "npm run build -w shared",
 		"build:front": "npm run build -w web",
-		"build:all": "npm run build:shared && npm run build:admin && npm run build:front",
+		"build:all": "npm run build:shared && npm run build:front",
 		"typecheck": "npm -ws --if-present run typecheck",
 		"check-format": "prettier --check \"**/*.{js,ts,tsx,jsx,json,md,css,scss}\"",
 		"format": "prettier --write \"**/*.{js,ts,tsx,jsx,json,md,css,scss}\"",

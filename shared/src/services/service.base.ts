@@ -1,7 +1,7 @@
 import { type SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@workspace/shared/utils/supabase/supabase.server";
-import { UserRole } from "@workspace/shared/types/user";
 import type { Database } from "@workspace/shared/types/supabase";
+import type { UserRole } from "@workspace/shared/types/auth";
 
 type ServiceBaseCurrentUser = {
 	id: string;
