@@ -1,0 +1,37 @@
+{
+	"name": "nascon",
+	"version": "1.0.0",
+	"description": "web app for nascon",
+	"private": true,
+	"type": "module",
+	"license": "ISC",
+	"workspaces": [
+		"admin",
+		"web",
+		"shared"
+	],
+	"scripts": {
+		"bootstrap": "npm install",
+		"dev:front": "npm run dev -w web",
+		"build:shared": "npm run build -w shared",
+		"build:front": "npm run build -w web",
+		"build:all": "npm run build:shared && npm run build:admin && npm run build:front",
+		"typecheck": "npm -ws --if-present run typecheck",
+		"check-format": "prettier --check \"**/*.{js,ts,tsx,jsx,json,md,css,scss}\"",
+		"format": "prettier --write \"**/*.{js,ts,tsx,jsx,json,md,css,scss}\"",
+		"prepare": "husky"
+	},
+	"lint-staged": {
+		"**/*.{js,ts,tsx,jsx,json,md,css,scss}": [
+			"prettier --write"
+		]
+	},
+	"devDependencies": {
+		"husky": "^9.1.7",
+		"lint-staged": "^16.2.7",
+		"prettier": "^3.7.4"
+	},
+	"dependencies": {
+		"@tanstack/react-query": "^5.90.12"
+	}
+}
