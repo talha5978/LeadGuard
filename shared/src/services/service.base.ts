@@ -29,6 +29,7 @@ export class Service implements ServiceBase {
 	protected readonly OPPORTUNITIES_TABLE = "opportunities";
 	protected readonly ACTIVITY_LOGS_TABLE = "activity_logs";
 	protected readonly NOTIFICATIONS_TABLE = "notifications";
+	protected readonly INVITATIONS_TABLE = "invitations";
 
 	constructor(request: Request, opts?: { supabase?: SupabaseClient<Database>; headers?: Headers }) {
 		if (opts?.supabase && opts?.headers) {

@@ -55,12 +55,6 @@ export const mainNavItems: NavItem[] = [
 				icon: <UserCheck />,
 				roles: ["owner", "admin"],
 			},
-			{
-				title: "Invite Member",
-				url: "/d/team/invite",
-				icon: <UserPlus />,
-				roles: ["owner", "admin"],
-			},
 		],
 	},
 	{

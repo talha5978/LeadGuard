@@ -6,11 +6,15 @@ export default [
 	route("login", "routes/Auth/login.tsx"),
 	route("logout", "./routes/Auth/logout.ts"),
 
+	route("invite/:token", "./routes/Invite/invite.$token.tsx"),
+
 	layout("./routes/Auth/auth-layout.tsx", [
 		route("d", "routes/Dashboard/dashboard.tsx", [
 			route("opportunities", "routes/Opportunities/opportunities.tsx"),
 
 			route("contacts", "./routes/Contacts/contacts.tsx"),
+
+			route("team", "./routes/Invite/team.tsx"),
 		]),
 	]),
 ] satisfies RouteConfig;
