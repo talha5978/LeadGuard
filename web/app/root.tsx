@@ -11,6 +11,9 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { Toaster } from "sonner";
 import { getCurrentUser } from "@workspace/shared/queries/auth.q.js";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@workspace/shared/lib/query-client/queryClient.js";
+import { TopLoadingBar } from "~/components/Loaders/TopLoadingBar";
 
 export const links: Route.LinksFunction = () => [
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -35,7 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Links />
 			</head>
 			<body>
-				{children}
+				<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 				<ScrollRestoration />
 				<Scripts />
 			</body>
@@ -58,6 +61,7 @@ export default function App() {
 		<>
 			<Outlet />
 			<Toaster />
+			<TopLoadingBar />
 		</>
 	);
 }

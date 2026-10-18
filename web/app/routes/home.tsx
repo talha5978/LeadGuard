@@ -1,6 +1,17 @@
-import { useState } from "react";
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { useState, useEffect } from "react";
+import {
+	Link,
+	useLoaderData,
+	useActionData,
+	useNavigation,
+	useSubmit,
+	type LoaderFunctionArgs,
+	type ActionFunctionArgs,
+} from "react-router";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
+import { Field, FieldError, FieldGroup, FieldLabel, FieldSet } from "~/components/ui/field";
 import {
 	ShieldCheck,
 	Zap,
@@ -16,8 +27,15 @@ import {
 	BellRing,
 	UserCheck,
 	HelpCircle,
+	Send,
+	Loader2,
 } from "lucide-react";
 import { getCurrentUser } from "@workspace/shared/queries/auth.q.js";
+import { ContactsService } from "@workspace/shared/services/contacts.service.js";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
 
 export function meta() {
 	return [
@@ -29,10 +47,17 @@ export function meta() {
 		},
 	];
 }
+const leadFormSchema = z.object({
+	full_name: z.string().min(2, "Name is required"),
+	email: z.string().email("Valid email is required"),
+	phone: z.string().optional(),
+	message: z.string().min(5, "Please tell us a bit more"),
+});
+
+type LeadFormData = z.infer<typeof leadFormSchema>;
 
 export async function loader({ request }: LoaderFunctionArgs) {
 	const headers = new Headers(request.headers);
-
 	const {
 		data: { user },
 	} = await getCurrentUser(request, headers);
@@ -40,14 +65,80 @@ export async function loader({ request }: LoaderFunctionArgs) {
 	return { user };
 }
 
+export async function action({ request }: ActionFunctionArgs) {
+	const formData = await request.formData();
+
+	const full_name = (formData.get("full_name") as string)?.trim();
+	const email = (formData.get("email") as string)?.trim();
+	const phone = (formData.get("phone") as string)?.trim() || undefined;
+	const message = (formData.get("message") as string)?.trim();
+
+	if (!full_name || !email || !message) {
+		return { success: false, error: "Please fill all required fields" };
+	}
+
+	const service = new ContactsService(request);
+	const result = await service.createPublicLead({
+		full_name,
+		email,
+		phone,
+		message,
+	});
+
+	if (!result.success) {
+		return { success: false, error: result.error || "Failed to submit" };
+	}
+
+	return { success: true };
+}
+
 export default function Home() {
 	const [activeFaq, setActiveFaq] = useState<number | null>(null);
+	const { user } = useLoaderData<typeof loader>();
+	const actionData = useActionData<typeof action>();
+	const navigation = useNavigation();
+	const submit = useSubmit();
+
+	const isSubmitting = navigation.state === "submitting";
+
+	const form = useForm<LeadFormData>({
+		resolver: zodResolver(leadFormSchema),
+		defaultValues: {
+			full_name: "",
+			email: "",
+			phone: "",
+			message: "",
+		},
+	});
+
+	const {
+		control,
+		handleSubmit,
+		reset,
+		formState: { errors },
+	} = form;
+
+	const onSubmit = (data: LeadFormData) => {
+		const fd = new FormData();
+		fd.append("full_name", data.full_name);
+		fd.append("email", data.email);
+		if (data.phone) fd.append("phone", data.phone);
+		fd.append("message", data.message);
+		submit(fd, { method: "POST" });
+	};
+
+	useEffect(() => {
+		if (actionData?.success) {
+			toast.success("Thank you! Your inquiry has been received. Someone will contact you shortly.");
+			reset();
+		} else if (actionData?.error) {
+			toast.error(actionData.error);
+		}
+	}, [actionData, reset]);
 
 	const toggleFaq = (index: number) => {
 		setActiveFaq(activeFaq === index ? null : index);
 	};
-
-	const { user } = useLoaderData<typeof loader>();
 
 	return (
 		<div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-accent selection:text-accent-foreground">
@@ -496,6 +587,120 @@ export default function Home() {
 								</span>
 							</div>
 						</div>
+					</div>
+				</div>
+			</section>
+
+			{/* ========== PUBLIC LEAD FORM SECTION ========== */}
+			<section id="lead-form" className="py-24 bg-muted/40 border-t border-border">
+				<div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+					<div className="text-center mb-10">
+						<span className="text-xs font-bold uppercase tracking-wider text-primary bg-accent px-3 py-1 rounded-full border border-border">
+							Try it live
+						</span>
+						<h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mt-4 tracking-tight">
+							Submit a lead right now
+						</h2>
+						<p className="mt-3 text-muted-foreground text-lg">
+							This is a real public form. Your inquiry will be created as a Contact +
+							Opportunity and assigned to an available team member with an SLA timer.
+						</p>
+					</div>
+
+					<div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-lg">
+						<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+							<FieldSet>
+								<FieldGroup>
+									<Controller
+										control={control}
+										name="full_name"
+										render={({ field }) => (
+											<Field data-invalid={!!errors.full_name}>
+												<FieldLabel htmlFor="full_name">Full name *</FieldLabel>
+												<Input id="full_name" placeholder="John Smith" {...field} />
+												{errors.full_name && (
+													<FieldError>{errors.full_name.message}</FieldError>
+												)}
+											</Field>
+										)}
+									/>
+
+									<div className="grid sm:grid-cols-2 gap-4">
+										<Controller
+											control={control}
+											name="email"
+											render={({ field }) => (
+												<Field data-invalid={!!errors.email}>
+													<FieldLabel htmlFor="email">Email *</FieldLabel>
+													<Input
+														id="email"
+														type="email"
+														placeholder="john@company.com"
+														{...field}
+													/>
+													{errors.email && (
+														<FieldError>{errors.email.message}</FieldError>
+													)}
+												</Field>
+											)}
+										/>
+
+										<Controller
+											control={control}
+											name="phone"
+											render={({ field }) => (
+												<Field>
+													<FieldLabel htmlFor="phone">Phone</FieldLabel>
+													<Input
+														id="phone"
+														placeholder="+92 300 1234567"
+														{...field}
+													/>
+												</Field>
+											)}
+										/>
+									</div>
+
+									<Controller
+										control={control}
+										name="message"
+										render={({ field }) => (
+											<Field data-invalid={!!errors.message}>
+												<FieldLabel htmlFor="message">How can we help? *</FieldLabel>
+												<Textarea
+													id="message"
+													placeholder="Tell us about your project or inquiry..."
+													rows={4}
+													{...field}
+												/>
+												{errors.message && (
+													<FieldError>{errors.message.message}</FieldError>
+												)}
+											</Field>
+										)}
+									/>
+								</FieldGroup>
+							</FieldSet>
+
+							<Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+								{isSubmitting ? (
+									<>
+										<Loader2 className="size-4 mr-2 animate-spin" />
+										Submitting...
+									</>
+								) : (
+									<>
+										<Send className="size-4 mr-2" />
+										Submit Inquiry
+									</>
+								)}
+							</Button>
+
+							<p className="text-xs text-center text-muted-foreground">
+								By submitting you agree to be contacted by our team. This creates a real lead
+								in the system.
+							</p>
+						</form>
 					</div>
 				</div>
 			</section>
