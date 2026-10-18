@@ -3,6 +3,7 @@ import {
 	OpportunitiesService,
 	type OpportunityFilters,
 } from "@workspace/shared/services/opportunities.service";
+import type { AppUser } from "@workspace/shared/types/auth";
 
 type OpportunitiesQueryArgs = {
 	request: Request;
@@ -22,6 +23,16 @@ export const opportunitiesQuery = ({
 		queryFn: async () => {
 			const service = new OpportunitiesService(request);
 			return service.getAll(filters, page, pageSize);
+		},
+	});
+};
+
+export const recoveryQueueQuery = ({ request, user }: { request: Request; user: AppUser }) => {
+	return queryOptions({
+		queryKey: ["recovery-queue"],
+		queryFn: async () => {
+			const service = new OpportunitiesService(request);
+			return service.getRecoveryQueue(user);
 		},
 	});
 };

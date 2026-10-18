@@ -47,6 +47,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 	};
 }
 
+export const meta = () => {
+	return [{ title: "Opportunities | LeadGuard" }];
+};
+
 export async function action({ request }: ActionFunctionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent") as string;

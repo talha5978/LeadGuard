@@ -43,6 +43,10 @@ const createOpportunitySchema = z.object({
 type CreateContactForm = z.infer<typeof createContactSchema>;
 type CreateOpportunityForm = z.infer<typeof createOpportunitySchema>;
 
+export const meta = () => {
+	return [{ title: "Contacts | LeadGuard" }];
+};
+
 export async function loader({ request }: LoaderFunctionArgs) {
 	const url = new URL(request.url);
 

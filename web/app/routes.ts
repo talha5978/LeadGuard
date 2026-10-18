@@ -15,6 +15,10 @@ export default [
 			route("contacts", "./routes/Contacts/contacts.tsx"),
 
 			route("team", "./routes/Invite/team.tsx"),
+
+			route("recovery", "./routes/Recovery/recovery.tsx"),
+
+			route("profile", "./routes/profile.ts"),
 		]),
 	]),
 ] satisfies RouteConfig;

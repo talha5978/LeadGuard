@@ -51,6 +51,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 	return { user, invitations: invitations || [], members: members || [] };
 }
 
+export const meta = () => {
+	return [{ title: "Invite Team Members | LeadGuard" }];
+};
+
 export async function action({ request }: ActionFunctionArgs) {
 	const formData = await request.formData();
 	const intent = formData.get("intent") as string;
