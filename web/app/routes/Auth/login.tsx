@@ -17,7 +17,7 @@ import { useForm, Controller } from "react-hook-form";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { AuthService } from "@workspace/shared/services/auth.service.js";
-import { loginSchema, type LoginFormData } from "@workspace/shared/schemas/login.schema.js";
+import { loginSchema } from "@workspace/shared/schemas/login.schema.js";
 import { ApiError } from "@workspace/shared/utils/ApiError.js";
 import type { ActionResponse } from "@workspace/shared/types/action-data.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -114,7 +114,7 @@ export default function LoginPage() {
 		if (actionData) {
 			if (actionData.success) {
 				toast.success("Logged in successfully");
-				navigate("/app", { replace: true });
+				navigate("/d", { replace: true });
 			} else if (actionData.error) {
 				toast.error(actionData.error, { description: "Please try again" });
 			}

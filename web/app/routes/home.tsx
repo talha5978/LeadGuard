@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
 	ShieldCheck,
@@ -17,6 +17,7 @@ import {
 	UserCheck,
 	HelpCircle,
 } from "lucide-react";
+import { getCurrentUser } from "@workspace/shared/queries/auth.q.js";
 
 export function meta() {
 	return [
@@ -29,12 +30,24 @@ export function meta() {
 	];
 }
 
+export async function loader({ request }: LoaderFunctionArgs) {
+	const headers = new Headers(request.headers);
+
+	const {
+		data: { user },
+	} = await getCurrentUser(request, headers);
+
+	return { user };
+}
+
 export default function Home() {
 	const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
 	const toggleFaq = (index: number) => {
 		setActiveFaq(activeFaq === index ? null : index);
 	};
+
+	const { user } = useLoaderData<typeof loader>();
 
 	return (
 		<div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-accent selection:text-accent-foreground">
@@ -85,18 +98,26 @@ export default function Home() {
 					</nav>
 
 					{/* Action Buttons */}
-					<div className="flex items-center gap-3">
-						<Link to="/login">
-							<Button variant="ghost" className="text-foreground font-medium">
-								Log in
-							</Button>
-						</Link>
-						<Link to="/signup">
+					{user ? (
+						<Link to="/d">
 							<Button className="bg-primary text-primary-foreground font-semibold shadow-sm transition-all">
-								Get Started Free
+								Dashboard
 							</Button>
 						</Link>
-					</div>
+					) : (
+						<div className="flex items-center gap-3">
+							<Link to="/login">
+								<Button variant="ghost" className="text-foreground font-medium">
+									Log in
+								</Button>
+							</Link>
+							<Link to="/signup">
+								<Button className="bg-primary text-primary-foreground font-semibold shadow-sm transition-all">
+									Get Started Free
+								</Button>
+							</Link>
+						</div>
+					)}
 				</div>
 			</header>
 
@@ -379,7 +400,7 @@ export default function Home() {
 									key={item.step}
 									className="p-6 rounded-xl bg-card border border-border shadow-xs flex gap-5 hover:border-primary/50 transition-colors"
 								>
-									<div className="flex-shrink-0">
+									<div className="shrink-0">
 										<div className="w-10 h-10 rounded-lg bg-accent text-primary flex items-center justify-center font-bold text-sm">
 											<item.icon className="w-5 h-5" />
 										</div>

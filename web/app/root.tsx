@@ -1,7 +1,16 @@
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import {
+	isRouteErrorResponse,
+	Links,
+	Meta,
+	Outlet,
+	Scripts,
+	ScrollRestoration,
+	type LoaderFunctionArgs,
+} from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { Toaster } from "sonner";
+import { getCurrentUser } from "@workspace/shared/queries/auth.q.js";
 
 export const links: Route.LinksFunction = () => [
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -32,6 +41,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 			</body>
 		</html>
 	);
+}
+
+export async function loader({ request }: LoaderFunctionArgs) {
+	const headers = new Headers(request.headers);
+
+	const {
+		data: { user, error },
+	} = await getCurrentUser(request, headers);
+
+	return { user, error };
 }
 
 export default function App() {

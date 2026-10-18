@@ -1,23 +1,13 @@
-import { Outlet, redirect, type LoaderFunctionArgs } from "react-router";
-import { getCurrentUser } from "@workspace/shared/queries/auth.q.js";
-
-export async function loader({ request }: LoaderFunctionArgs) {
-	const headers = new Headers(request.headers);
-
-	const {
-		data: { user, error },
-	} = await getCurrentUser(request, headers);
-
-	// Not logged in → send to login
-	if (!user || error) {
-		return redirect("/login");
-	}
-
-	// Pass the user to all child routes
-	return { user };
-}
+import { Outlet, useNavigate, useRouteLoaderData } from "react-router";
+import type { loader } from "~/root";
 
 export default function AppLayout() {
+	const d = useRouteLoaderData<typeof loader>("root");
+	const navigate = useNavigate();
+	if (!d?.user) {
+		navigate("/", { replace: true });
+	}
+
 	return (
 		<div className="min-h-screen bg-background">
 			<main>
